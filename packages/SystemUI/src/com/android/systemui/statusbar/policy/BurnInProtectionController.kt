@@ -41,7 +41,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 private const val BURN_IN_PREVENTION_PERIOD = 83f
-private const val UPDATE_INTERVAL = 1000 * 10L
 
 private val TAG = BurnInProtectionController::class.simpleName
 
@@ -56,6 +55,8 @@ class BurnInProtectionController @Inject constructor(
     private val coroutineScope = CoroutineScope(Dispatchers.Main)
 
     private val shiftEnabled = context.resources.getBoolean(R.bool.config_statusBarBurnInProtection)
+
+    private val shiftInterval = context.resources.getInteger(R.integer.config_shift_interval) * 1000L
 
     private var navigationMode: Int = navigationModeController.addListener(this)
 
@@ -139,7 +140,7 @@ class BurnInProtectionController @Inject constructor(
                     "new offsets: sbOffset = $sbOffset, nbOffset = $nbOffset"
                 }
                 updateViews(sbOffset, nbOffset)
-                delay(UPDATE_INTERVAL)
+                delay(shiftInterval)
             }
         }
         logD {
