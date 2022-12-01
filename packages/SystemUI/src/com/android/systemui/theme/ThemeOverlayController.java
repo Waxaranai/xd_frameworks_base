@@ -35,7 +35,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.om.FabricatedOverlay;
+import android.content.om.IOverlayManager;
 import android.content.om.OverlayIdentifier;
+import android.content.om.OverlayInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -44,6 +46,8 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.SystemProperties;
 import android.os.Handler;
+import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -110,6 +114,8 @@ public class ThemeOverlayController extends CoreStartable implements Dumpable {
     protected static final int NEUTRAL = 0;
     protected static final int ACCENT = 1;
 
+    private static final String DARK_OVERLAY_NAME = "com.android.yaap.dark_bg";
+
     private final ThemeOverlayApplier mThemeManager;
     private final UserManager mUserManager;
     private final BroadcastDispatcher mBroadcastDispatcher;
@@ -144,6 +150,8 @@ public class ThemeOverlayController extends CoreStartable implements Dumpable {
     private final SparseIntArray mDeferredWallpaperColorsFlags = new SparseIntArray();
     private final WakefulnessLifecycle mWakefulnessLifecycle;
     private ConfigurationController mConfigurationController;
+
+    private IOverlayManager mOverlayManager;
 
     // Defers changing themes until Setup Wizard is done.
     private boolean mDeferredThemeEvaluation;
@@ -381,6 +389,9 @@ public class ThemeOverlayController extends CoreStartable implements Dumpable {
         mConfigurationController = configurationController;
         mConfigurationController.addCallback(mConfigurationListener);
         dumpManager.registerDumpable(TAG, this);
+
+        mOverlayManager = IOverlayManager.Stub.asInterface(
+                ServiceManager.getService(Context.OVERLAY_SERVICE));
     }
 
     @Override
@@ -644,10 +655,24 @@ public class ThemeOverlayController extends CoreStartable implements Dumpable {
             }
         }
 
+        boolean nightMode = (mResources.getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        boolean skipNeutral = false;
+        if (mOverlayManager != null && nightMode) {
+            OverlayInfo info = null;
+            try {
+                info = mOverlayManager.getOverlayInfo(DARK_OVERLAY_NAME, mUserTracker.getUserId());
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed getting overlay " + DARK_OVERLAY_NAME + " info");
+                e.printStackTrace();
+            }
+            skipNeutral = info != null && info.isEnabled();
+        }
+
         // Compatibility with legacy themes, where full packages were defined, instead of just
         // colors.
         if (!categoryToPackage.containsKey(OVERLAY_CATEGORY_SYSTEM_PALETTE)
-                && mNeutralOverlay != null) {
+                && mNeutralOverlay != null && !skipNeutral) {
             categoryToPackage.put(OVERLAY_CATEGORY_SYSTEM_PALETTE,
                     mNeutralOverlay.getIdentifier());
         }
